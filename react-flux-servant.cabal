@@ -35,11 +35,12 @@ library
                       OverloadedStrings
                       ScopedTypeVariables
 
-  build-depends: base >=4.8 && < 5
+  build-depends: base >= 4.8 && < 5
                , react-flux >= 1.2 && < 1.4
                , servant >= 0.7
                , aeson >= 0.8
                , text >= 1.2
+               , string-conversions >= 0.4 && < 0.5
 
   if impl(ghcjs)
       build-depends: ghcjs-base
