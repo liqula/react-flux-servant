@@ -10,5 +10,7 @@ setup-info:
 
 packages:
     - .
+    - ../react-flux
+
 extra-deps:
     - react-flux-1.3.0
