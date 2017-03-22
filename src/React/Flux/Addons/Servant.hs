@@ -260,7 +260,7 @@ instance (ReflectMethod m, FromJSON (VBodyContent vbody))
                   , reqTimeout = rTimeout r
                   }
         ajax req $ \resp ->
-            if respStatus resp == 200
+            if respStatus resp < 300
                 then do
                     j <- js_JSONParse $ respResponseText resp
                     mv <- fromJSVal j
