@@ -80,23 +80,19 @@ module React.Flux.Addons.Servant(
   , Request(..)
 ) where
 
-import Control.Exception
 import React.Flux
 import React.Flux.Ajax
 import Servant.Utils.Links
 import Servant.API
 import GHC.TypeLits
-import Data.String.Conversions (LBS, cs)
+import Data.String.Conversions (cs)
 import Data.Typeable (Proxy(..))
 import Data.Aeson
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
-#ifdef __GHCJS__
 import Data.JSString (JSString)
-import GHCJS.Types (JSVal, nullRef)
-import GHCJS.Marshal (toJSVal_aeson, FromJSVal(..))
 import Data.JSString.Text (textToJSString)
 import qualified Data.JSString as JSS
 
@@ -107,33 +103,6 @@ jsUnpack = JSS.unpack
 jsIntercalate :: JSString -> [JSString] -> JSString
 jsIntercalate = JSS.intercalate
 
-#else
-import Data.List (intercalate)
-type JSVal = ()
-type JSString = String
-
-nullRef :: JSVal
-nullRef = ()
-
-jsPack :: String -> JSString
-jsPack = id
-
-jsUnpack :: JSString -> String
-jsUnpack = id
-
-jsIntercalate :: JSString -> [JSString] -> JSString
-jsIntercalate = intercalate
-
-textToJSString :: T.Text -> JSString
-textToJSString = T.unpack
-
-fromJSVal :: JSVal -> IO a
-fromJSVal = undefined
-
-toJSVal_aeson :: a -> IO JSString
-toJSVal_aeson = undefined
-
-#endif
 
 -- | Internal state used when building the request.
 data Request = Request {
