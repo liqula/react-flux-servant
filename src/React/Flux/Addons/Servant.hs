@@ -85,16 +85,14 @@ import React.Flux.Ajax
 import Servant.Utils.Links
 import Servant.API
 import GHC.TypeLits
+import Data.String.Conversions (cs)
 import Data.Typeable (Proxy(..))
 import Data.Aeson
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
-#ifdef __GHCJS__
 import Data.JSString (JSString)
-import GHCJS.Types (JSVal, nullRef)
-import GHCJS.Marshal (toJSVal_aeson, FromJSVal(..))
 import Data.JSString.Text (textToJSString)
 import qualified Data.JSString as JSS
 
@@ -105,40 +103,13 @@ jsUnpack = JSS.unpack
 jsIntercalate :: JSString -> [JSString] -> JSString
 jsIntercalate = JSS.intercalate
 
-#else
-import Data.List (intercalate)
-type JSVal = ()
-type JSString = String
-
-nullRef :: JSVal
-nullRef = ()
-
-jsPack :: String -> JSString
-jsPack = id
-
-jsUnpack :: JSString -> String
-jsUnpack = id
-
-jsIntercalate :: JSString -> [JSString] -> JSString
-jsIntercalate = intercalate
-
-textToJSString :: T.Text -> JSString
-textToJSString = T.unpack
-
-fromJSVal :: JSVal -> IO a
-fromJSVal = undefined
-
-toJSVal_aeson :: a -> IO JSString
-toJSVal_aeson = undefined
-
-#endif
 
 -- | Internal state used when building the request.
 data Request = Request {
     segments :: [JSString]
   , rHeaders :: [(JSString, JSString)]
   , rQuery :: [(JSString, JSString)]
-  , rBody :: IO JSVal
+  , rBody :: JSString
   , rTimeout :: RequestTimeout
 }
 
@@ -188,7 +159,7 @@ data ApiRequestConfig api = ApiRequestConfig
 -- request cfg (Proxy :: Proxy SetUser) :: UserId -> User -> HandleResponse () -> IO ()
 -- @
 request :: (IsElem endpoint api, HasAjaxRequest endpoint) => ApiRequestConfig api -> Proxy endpoint -> MkRequest endpoint
-request (ApiRequestConfig p t) endpoint = toRequest endpoint (Request [p] [] [] (pure nullRef) t)
+request (ApiRequestConfig p t) endpoint = toRequest endpoint (Request [p] [] [] "" t)
 
 -- | A class very similar to "Servant.Utils.Links".  You shouldn't need to use this class directly: instead
 -- use 'request'.  Having said that, the 'MkRequest' type defined in this typeclass is important as it determines
@@ -200,7 +171,7 @@ class HasAjaxRequest endpoint where
 instance (ToJSON a, HasAjaxRequest sub) => HasAjaxRequest (ReqBody '[JSON] a :> sub) where
     type MkRequest (ReqBody '[JSON] a :> sub) = a -> MkRequest sub
     toRequest _ r body = toRequest (Proxy :: Proxy sub) (r
-        { rBody = toJSVal_aeson body >>= js_JSONstringify
+        { rBody = jsPack . cs $ encode body
         , rHeaders = rHeaders r ++ [("Content-Type", "application/json")]
         })
 
@@ -248,7 +219,6 @@ instance (ReflectMethod m, FromJSON (VBodyContent vbody))
     => HasAjaxRequest (Verb m s '[JSON] vbody) where
     type MkRequest (Verb m s '[JSON] vbody) = HandleResponse (VBodyContent vbody) -> IO ()
     toRequest _ r handler = do
-        body <- rBody r
         let query :: JSString = case rQuery r of
                         [] -> ""
                         qs -> "?" <> jsIntercalate "&" (map (\(x,y) -> x <> "=" <> y) qs)
@@ -256,32 +226,13 @@ instance (ReflectMethod m, FromJSON (VBodyContent vbody))
                   { reqMethod = textToJSString $ T.decodeUtf8 $ reflectMethod (Proxy :: Proxy m)
                   , reqURI = jsIntercalate "/" (segments r) <> query
                   , reqHeaders = rHeaders r ++ [("Accept", "application/json")]
-                  , reqBody = body
+                  , reqBody = rBody r
                   , reqTimeout = rTimeout r
                   }
         ajax req $ \resp ->
-            if respStatus resp == 200
+            if respStatus resp < 300
                 then do
-                    j <- js_JSONParse $ respResponseText resp
-                    mv <- fromJSVal j
-                    case mv of
-                        Nothing -> handler $ Left (500, "Unable to convert response body")
-                        Just v -> case fromJSON v of
-                            Success v' -> handler $ Right v'
-                            Error e -> handler $ Left (500, e)
+                    case eitherDecode . cs . jsUnpack . respResponseText $ resp of
+                        Left err -> handler $ Left (500, "Unable to convert response body: " <> err)  -- TODO: this is not an HTTP error.
+                        Right v  -> handler $ Right v
                 else handler $ Left (respStatus resp, jsUnpack $ respResponseText resp)
-
-#ifdef __GHCJS__
-foreign import javascript unsafe
-    "JSON['parse']($1)"
-    js_JSONParse :: JSString -> IO JSVal
-
-foreign import javascript unsafe
-    "JSON['stringify']($1)"
-    js_JSONstringify :: JSVal -> IO JSVal
-#else
-js_JSONParse :: JSString -> IO JSVal
-js_JSONParse _ = return ()
-js_JSONstringify :: JSString -> IO JSVal
-js_JSONstringify _ = return ()
-#endif
