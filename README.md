@@ -1,3 +1,6 @@
+
+# DEPRECATED BY https://github.com/liqula/react-hs
+
 This project integrates [react-flux](http://hackage.haskell.org/package/react-flux) with
 [servant](http://hackage.haskell.org/package/servant).  There is a small example in the
 haddock documentation.  To depend on this module, I add it to the `extra-deps` in my
